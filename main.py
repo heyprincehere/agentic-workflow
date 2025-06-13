@@ -9,7 +9,7 @@ from openai import OpenAI
 
 # Load .env
 load_dotenv()
-openrouter_key = os.getenv("OPENROUTER_API_KEY")
+openrouter_key = os.getenv("OPENAI_API_KEY")  # ✅ must be OPENAI_API_KEY even for OpenRouter
 
 # OpenRouter Client
 client = OpenAI(
@@ -28,7 +28,7 @@ def call_openrouter(prompt: str) -> str:
     except Exception as e:
         return f"Error calling OpenRouter: {str(e)}"
 
-# 🔹 Updated State with feedback
+# LangGraph State
 class GraphState(TypedDict):
     input: str
     tasks: List[str]
@@ -50,8 +50,7 @@ Improve the following tasks based on user input "{state['input']}":
 
 {state['tasks']}
 
-Return improved tasks only, one per line.
-"""
+Return improved tasks only, one per line."""
     response = call_openrouter(prompt)
     refined = [line.strip("-• ") for line in response.strip().split("\n") if line.strip()]
     return {"tasks": refined}
@@ -77,12 +76,9 @@ Were these answers helpful, accurate, and complete?
 Respond with one word only: "good" or "retry"
 """
     judgment = call_openrouter(prompt).lower()
-    if "retry" in judgment:
-        return {"feedback": "retry"}
-    else:
-        return {"feedback": "good"}
+    return {"feedback": "retry"} if "retry" in judgment else {"feedback": "good"}
 
-# 🔁 LangGraph Setup
+# 🧠 LangGraph Setup
 graph = StateGraph(GraphState)
 
 graph.add_node("Planner", plan_agent)
@@ -96,7 +92,6 @@ graph.add_edge("Planner", "Refiner")
 graph.add_edge("Refiner", "Executor")
 graph.add_edge("Executor", "Reflector")
 
-# 🔁 If reflection fails → loop back
 graph.add_conditional_edges("Reflector", lambda state:
     "Executor" if state.get("feedback") == "retry" else "end"
 )
@@ -106,7 +101,7 @@ graph.set_finish_point("Reflector")
 # Compile it
 app = graph.compile()
 
-# 🚀 Run it
+# Run
 if __name__ == "__main__":
     user_input = input("Enter your task: ")
     try:
